@@ -33,6 +33,51 @@ class GraphWidget(QWidget):
         self.clean_button.clicked.connect(self.clean)
         self.scene.mouseDoubleClickEvent = self.reload_vertex
 
+        # Стилизация интерфейса
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 12px;
+                font-size: 14px;
+                border-radius: 8px;
+                margin: 5px;
+                width: 200px;
+            }
+
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+
+            QTableWidget {
+                font-size: 14px;
+                border: 1px solid #ddd;
+                gridline-color: #ddd;
+                padding: 10px;
+            }
+
+            QTableWidget::item {
+                padding: 10px;
+            }
+
+            QDialog {
+                background-color: #f7f7f7;
+                border-radius: 10px;
+                padding: 20px;
+            }
+
+            QLineEdit, QComboBox {
+                font-size: 14px;
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+            }
+
+            QFormLayout {
+                margin: 10px;
+            }
+        """)
+
         # Настройка интерфейса
         layout = QVBoxLayout()
         layout.addWidget(self.view)
@@ -70,9 +115,6 @@ class GraphWidget(QWidget):
                 x[1].setPos(x[0].pos() + QPointF(15, -5))
 
         if self.edges:
-            for i in range(len(self.edges)):
-                self.scene.removeItem(self.edges[i][2])
-
             # Перерисовываем все рёбра и надписи с учётом новых координат
             self.update_edges_and_labels()
 
@@ -85,7 +127,7 @@ class GraphWidget(QWidget):
             edge[3].setPos((start_vertex_pos + end_vertex_pos) / 2)
 
     def show_add_edge_dialog(self):
-        dialog = AddEdgeDialog(self, self.vertices.keys())
+        dialog = AddEdgeDialog(self, list(self.vertices.keys()))
         if dialog.exec_() == QDialog.Accepted:
             start_vertex = dialog.start_vertex
             end_vertex = dialog.end_vertex
@@ -146,7 +188,7 @@ class GraphWidget(QWidget):
                                                  adjacency_matrix[i][k] + adjacency_matrix[k][j])
 
         # Открываем диалог с таблицей расстояний
-        distance_table = DistanceTableWidget(self.vertices.keys(), adjacency_matrix)
+        distance_table = DistanceTableWidget(list(self.vertices.keys()), adjacency_matrix)
         distance_table.exec_()
 
 
@@ -191,7 +233,6 @@ class AddEdgeDialog(QDialog):
         self.weight = int(weight)
         super().accept()
 
-
 class DistanceTableWidget(QDialog):
     def __init__(self, keys, adjacency_matrix):
         super().__init__()
@@ -214,14 +255,186 @@ class DistanceTableWidget(QDialog):
         layout.addWidget(self.save_button)
 
     def display_distances_in_table(self, keys, adjacency_matrix):
-        self.table_widget.setColumnCount(len(keys))
+        # Устанавливаем количество строк и столбцов
         self.table_widget.setRowCount(len(keys))
+        self.table_widget.setColumnCount(len(keys))
+
+        # Устанавливаем заголовки для столбцов и строк
         self.table_widget.setHorizontalHeaderLabels(keys)
         self.table_widget.setVerticalHeaderLabels(keys)
 
+        # Заполняем таблицу значениями
         for i, start_vertex in enumerate(keys):
             for j, end_vertex in enumerate(keys):
-                if adjacency_matrix[i][j] != None:
+                if adjacency_matrix[i][j] != float("inf"):  # Пропускаем "бесконечные" расстояния
+                    self.table_widget.setItem(i, j, QTableWidgetItem(str(int(adjacency_matrix[i][j]))))
+
+    def save_to_file(self):
+        # Открытие диалогового окна для выбора пути сохранения файла
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить таблицу в файл", "", "Text Files (*.txt);;All Files (*)", options=options)
+
+        if file_name:
+            with open(file_name, 'w') as file:
+                # Запись заголовков
+                file.write("\t" + "\t".join(self.table_widget.horizontalHeaderLabels()) + "\n")
+
+                # Запись данных таблицы
+                for i in range(self.table_widget.rowCount()):
+                    row = [self.table_widget.verticalHeaderItem(i).text()]  # Добавляем имя вершины
+                    for j in range(self.table_widget.columnCount()):
+                        item = self.table_widget.item(i, j)
+                        if item:
+                            row.append(item.text())
+                        else:
+                            row.append("")  # Пустое значение, если ячейки нет
+                    file.write("\t".join(row) + "\n")
+
+    def __init__(self, keys, adjacency_matrix):
+        super().__init__()
+
+        self.setWindowTitle('Кратчайшие расстояния')
+
+        # Создание виджета таблицы для вывода расстояний
+        self.table_widget = QTableWidget(self)
+
+        # Вывод кратчайших расстояний в таблицу
+        self.display_distances_in_table(keys, adjacency_matrix)
+
+        # Кнопка для сохранения таблицы в файл
+        self.save_button = QPushButton('Сохранить в файл', self)
+        self.save_button.clicked.connect(self.save_to_file)
+
+        # Настройка интерфейса
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.table_widget)
+        layout.addWidget(self.save_button)
+
+    def display_distances_in_table(self, keys, adjacency_matrix):
+        # Устанавливаем количество строк и столбцов, добавляем 1 для заголовков
+        self.table_widget.setRowCount(len(keys))
+        self.table_widget.setColumnCount(len(keys))
+
+        # Устанавливаем заголовки для столбцов и строк
+        self.table_widget.setHorizontalHeaderLabels(keys)
+        self.table_widget.setVerticalHeaderLabels(keys)
+
+        # Заполняем таблицу значениями
+        for i, start_vertex in enumerate(keys):
+            for j, end_vertex in enumerate(keys):
+                if adjacency_matrix[i][j] != float("inf"):  # Пропускаем "бесконечные" расстояния
+                    self.table_widget.setItem(i, j, QTableWidgetItem(str(int(adjacency_matrix[i][j]))))
+
+    def save_to_file(self):
+        # Открытие диалогового окна для выбора пути сохранения файла
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить таблицу в файл", "", "Text Files (*.txt);;All Files (*)", options=options)
+
+        if file_name:
+            with open(file_name, 'w') as file:
+                # Запись заголовков
+                file.write("\t" + "\t".join(self.table_widget.horizontalHeaderLabels()) + "\n")
+
+                # Запись данных таблицы
+                for i in range(self.table_widget.rowCount()):
+                    row = [self.table_widget.verticalHeaderItem(i).text()]  # Добавляем имя вершины
+                    for j in range(self.table_widget.columnCount()):
+                        item = self.table_widget.item(i, j)
+                        if item:
+                            row.append(item.text())
+                        else:
+                            row.append("")  # Пустое значение, если ячейки нет
+                    file.write("\t".join(row) + "\n")
+
+    def __init__(self, keys, adjacency_matrix):
+        super().__init__()
+
+        self.setWindowTitle('Кратчайшие расстояния')
+
+        # Создание виджета таблицы для вывода расстояний
+        self.table_widget = QTableWidget(self)
+
+        # Вывод кратчайших расстояний в таблицу
+        self.display_distances_in_table(keys, adjacency_matrix)
+
+        # Кнопка для сохранения таблицы в файл
+        self.save_button = QPushButton('Сохранить в файл', self)
+        self.save_button.clicked.connect(self.save_to_file)
+
+        # Настройка интерфейса
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.table_widget)
+        layout.addWidget(self.save_button)
+
+    def display_distances_in_table(self, keys, adjacency_matrix):
+        # Устанавливаем количество строк и столбцов, добавляем 1 для заголовков
+        self.table_widget.setRowCount(len(keys))
+        self.table_widget.setColumnCount(len(keys))
+
+        # Устанавливаем заголовки для столбцов и строк
+        self.table_widget.setHorizontalHeaderLabels(keys)
+        self.table_widget.setVerticalHeaderLabels(keys)
+
+        # Заполняем таблицу значениями
+        for i, start_vertex in enumerate(keys):
+            for j, end_vertex in enumerate(keys):
+                if adjacency_matrix[i][j] != float("inf"):  # Пропускаем "бесконечные" расстояния
+                    self.table_widget.setItem(i, j, QTableWidgetItem(str(int(adjacency_matrix[i][j]))))
+
+    def save_to_file(self):
+        # Открытие диалогового окна для выбора пути сохранения файла
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить таблицу в файл", "", "Text Files (*.txt);;All Files (*)", options=options)
+
+        if file_name:
+            with open(file_name, 'w') as file:
+                # Запись заголовков
+                file.write("\t" + "\t".join(self.table_widget.horizontalHeaderLabels()) + "\n")
+
+                # Запись данных таблицы
+                for i in range(self.table_widget.rowCount()):
+                    row = [self.table_widget.verticalHeaderItem(i).text()]  # Добавляем имя вершины
+                    for j in range(self.table_widget.columnCount()):
+                        item = self.table_widget.item(i, j)
+                        if item:
+                            row.append(item.text())
+                        else:
+                            row.append("")  # Пустое значение, если ячейки нет
+                    file.write("\t".join(row) + "\n")
+
+    def __init__(self, keys, adjacency_matrix):
+        super().__init__()
+
+        self.setWindowTitle('Кратчайшие расстояния')
+
+        # Создание виджета таблицы для вывода расстояний
+        self.table_widget = QTableWidget(self)
+
+        # Вывод кратчайших расстояний в таблицу
+        self.display_distances_in_table(keys, adjacency_matrix)
+
+        # Кнопка для сохранения таблицы в файл
+        self.save_button = QPushButton('Сохранить в файл', self)
+        self.save_button.clicked.connect(self.save_to_file)
+
+        # Настройка интерфейса
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.table_widget)
+        layout.addWidget(self.save_button)
+
+    def display_distances_in_table(self, keys, adjacency_matrix):
+        # Устанавливаем количество строк и столбцов
+        self.table_widget.setRowCount(len(keys))
+        self.table_widget.setColumnCount(len(keys))
+
+        # Устанавливаем заголовки для столбцов и строк
+        self.table_widget.setHorizontalHeaderLabels(keys)
+        self.table_widget.setVerticalHeaderLabels(keys)
+
+        # Заполняем таблицу значениями
+        for i, start_vertex in enumerate(keys):
+            for j, end_vertex in enumerate(keys):
+                if adjacency_matrix[i][j] != float("inf"):
                     self.table_widget.setItem(i, j, QTableWidgetItem(str(int(adjacency_matrix[i][j]))))
 
     def save_to_file(self):
@@ -234,8 +447,64 @@ class DistanceTableWidget(QDialog):
                 for i in range(self.table_widget.rowCount()):
                     row = []
                     for j in range(self.table_widget.columnCount()):
-                        row.append(self.table_widget.item(i, j).text())
+                        item = self.table_widget.item(i, j)
+                        # Проверяем, существует ли ячейка
+                        if item:
+                            row.append(item.text())
+                        else:
+                            row.append("")  # Пустое значение, если ячейки нет
                     file.write("\t".join(row) + "\n")
+
+    def __init__(self, keys, adjacency_matrix):
+        super().__init__()
+
+        self.setWindowTitle('Кратчайшие расстояния')
+
+        # Создание виджета таблицы для вывода расстояний
+        self.table_widget = QTableWidget(self)
+
+        # Вывод кратчайших расстояний в таблицу
+        self.display_distances_in_table(keys, adjacency_matrix)
+
+        # Кнопка для сохранения таблицы в файл
+        self.save_button = QPushButton('Сохранить в файл', self)
+        self.save_button.clicked.connect(self.save_to_file)
+
+        # Настройка интерфейса
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.table_widget)
+        layout.addWidget(self.save_button)
+
+    def display_distances_in_table(self, keys, adjacency_matrix):
+        self.table_widget.setColumnCount(len(keys) + 1)
+        self.table_widget.setRowCount(len(keys) + 1)
+        self.table_widget.setHorizontalHeaderLabels([""] + keys)
+        self.table_widget.setVerticalHeaderLabels([""] + keys)
+
+        for i, start_vertex in enumerate(keys):
+            self.table_widget.setItem(i + 1, 0, QTableWidgetItem(start_vertex))
+            for j, end_vertex in enumerate(keys):
+                if adjacency_matrix[i][j] != float("inf"):
+                    self.table_widget.setItem(i + 1, j + 1, QTableWidgetItem(str(int(adjacency_matrix[i][j]))))
+
+    def save_to_file(self):
+        # Открытие диалогового окна для выбора пути сохранения файла
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить таблицу в файл", "", "Text Files (*.txt);;All Files (*)", options=options)
+    
+        if file_name:
+            with open(file_name, 'w') as file:
+                for i in range(self.table_widget.rowCount()):
+                    row = []
+                    for j in range(self.table_widget.columnCount()):
+                        item = self.table_widget.item(i, j)
+                        # Проверяем, существует ли ячейка
+                        if item:
+                            row.append(item.text())
+                        else:
+                            row.append("")  # Пустое значение, если ячейки нет
+                    file.write("\t".join(row) + "\n")
+
 
 
 if __name__ == '__main__':
